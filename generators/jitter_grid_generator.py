@@ -168,7 +168,7 @@ class VoronoiPatternGenerator:
         
         print(">>> DEBUG: JITTER_GRID_GENERATOR v2 IS RUNNING. ABOUT TO RETURN STRING.")    
             # --- 加入這些終極除錯程式碼 ---
-        import ezdxf
+        # import ezdxf  <--- 移除這一行！
         print(f"--- DIAGNOSTICS ---")
         print(f"ezdxf version being used: {ezdxf.__version__}")
         print(f"ezdxf library location: {ezdxf.__file__}")
