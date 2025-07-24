@@ -149,7 +149,7 @@ class VoronoiPatternGenerator:
             
         self._add_text_to_dxf(dxf_doc, msp)
 
-        return dxf_doc.dumps()
+        return dxf_doc.tostring()
 
 # --- API 入口函式 ---
 def generate(**kwargs) -> str:
