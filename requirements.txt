@@ -5,4 +5,4 @@ uvicorn
 numpy
 scipy
 gdstk
-ezdxf
+ezdxf==1.4.2
