@@ -1,8 +1,19 @@
-# render.yaml
-
 services:
   - type: web
-    name: honeycomb-api
+    name: honeycomb-api # 您的服務名稱
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn api.index:app --host 0.0.0.0 --port $PORT"
+    
+    # --- 加入或修改這一段 ---
+    preBuildCommand: "pip install --upgrade pip && pip uninstall -y ezdxf && pip install --no-cache-dir -r requirements.txt"
+    
+    # --- 如果您有 buildFilter，請保留它 ---
+    buildFilter:
+      paths:
+      - "api/**"
+      - "generators/**"
+      - "requirements.txt"
+      - "render.yaml" # 建議也把這個檔案加進去
+      ignoredPaths:
+      - "*.md"
