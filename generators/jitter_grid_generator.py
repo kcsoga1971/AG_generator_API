@@ -165,7 +165,8 @@ class VoronoiPatternGenerator:
             # 從 gdstk 單位轉換回 DXF 單位 (mm)
             points_in_mm = poly.points / self.unit
             msp.add_lwpolyline(points_in_mm, close=True, dxfattribs={"layer": "Pattern"})
-            
+        
+        print(">>> DEBUG: JITTER_GRID_GENERATOR v2 IS RUNNING. ABOUT TO RETURN STRING.")    
         return doc.tostring()
 
 
