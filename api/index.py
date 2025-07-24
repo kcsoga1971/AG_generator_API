@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from starlette.responses import Response
 from typing import Union, Literal, Dict, Any
 from datetime import datetime
+# --- 加入這行，匯入 traceback 模組 ---
+import traceback
 
 # 從我們的 generators 套件中，匯入各個生成器模組
 from generators import jitter_grid_generator, sunflower_generator, poisson_generator
@@ -114,8 +116,12 @@ def generate_pattern(request: PatternRequest):
         )
 
     except Exception as e:
-        # 捕捉生成過程中可能發生的任何錯誤
-        # 在開發中可以印出詳細錯誤，在生產環境中應記錄到日誌
-        print(f"Error during generation: {e}")
+        # --- 這是關鍵的修改 ---
+        # 在日誌中印出完整的錯誤堆疊追蹤
+        print("--- An exception occurred, printing full traceback: ---")
+        traceback.print_exc()
+        print("----------------------------------------------------")
+        
+        # 保持原有的錯誤回傳給使用者
         raise HTTPException(status_code=500, detail=f"An error occurred during pattern generation: {str(e)}")
 
