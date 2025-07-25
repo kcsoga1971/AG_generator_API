@@ -1,63 +1,44 @@
-# /api/index.py (最終除錯版本)
+# /api/index.py (最終版本)
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 import io
-import sys
-import os
-import traceback
 
-# --- 開始診斷代碼 ---
-print("--- [DIAGNOSTIC] STARTING API SERVER (Final Debug Version) ---")
-print(f"--- [DIAGNOSTIC] Python Version: {sys.version}")
-print(f"--- [DIAGNOSTIC] Current Working Directory: {os.getcwd()}")
-print("--- [DIAGNOSTIC] Attempting to import the 'generators.jitter_grid_generator' module...")
-
-IMPORT_ERROR_MESSAGE = ""
-IMPORT_SUCCESS = False
-
-try:
-    # 關鍵改動：我們不再導入特定函式，而是導入整個模組。
-    # 這會強制 Python 執行 jitter_grid_generator.py 並報告其內部的任何錯誤。
-    import generators.jitter_grid_generator
-    
-    print("--- [DIAGNOSTIC] SUCCESS: The module 'generators.jitter_grid_generator' was imported.")
-    IMPORT_SUCCESS = True
-except Exception as e:
-    IMPORT_SUCCESS = False
-    error_stack = traceback.format_exc()
-    IMPORT_ERROR_MESSAGE = f"Error Type: {type(e).__name__}\nError Details: {e}\nFull Traceback:\n{error_stack}"
-    
-    print("--- [DIAGNOSTIC] ##################################################")
-    print(f"--- [DIAGNOSTIC] CRITICAL ERROR: FAILED to import the module!")
-    print(f"--- [DIAGNOSTIC] THIS IS THE ROOT CAUSE:")
-    print(f"--- [DIAGNOSTIC] {IMPORT_ERROR_MESSAGE}")
-    print("--- [DIAGNOSTIC] ##################################################")
-# --- 結束診斷代碼 ---
-
+# 從我們的模型檔案導入請求模型
+from api.models import JitterGridRequest
+# 從生成器檔案導入生成函式
+from generators.jitter_grid_generator import generate_jitter_grid_dxf
 
 app = FastAPI()
 
 @app.get("/")
 def read_root():
-    if IMPORT_SUCCESS:
-        status = "OK"
-        message = "API is running. The generator module was imported successfully."
-    else:
-        status = "ERROR"
-        message = "API is running, but the generator module failed to load. Check logs for the root cause."
-    return {"status": status, "message": message}
+    return {"status": "OK", "message": "Honeycomb API is running."}
 
-@app.get("/debug-import-error")
-def get_import_error():
-    if IMPORT_SUCCESS:
-        return {"message": "No import error was detected."}
-    else:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "Module Load Failed",
-                "details": IMPORT_ERROR_MESSAGE
-            }
+@app.post("/generate/jitter-grid")
+def generate_jitter_grid_endpoint(params: JitterGridRequest):
+    """
+    接收參數並生成一個抖動網格的 DXF 檔案。
+    """
+    try:
+        # 呼叫您的生成器函式
+        dxf_output_string = generate_jitter_grid_dxf(params)
+        
+        # 將 DXF 字串轉換為 bytes
+        dxf_bytes = io.BytesIO(dxf_output_string.encode('utf-8'))
+        
+        # 回傳 DXF 檔案
+        return Response(
+            content=dxf_bytes.getvalue(),
+            media_type="application/vnd.dxf",
+            headers={"Content-Disposition": "attachment; filename=jitter_grid.dxf"}
         )
+    except Exception as e:
+        # 在生產環境中提供更詳細的錯誤日誌會很有幫助
+        print(f"Error during DXF generation: {e}")
+        return Response(
+            content=f"An error occurred: {e}",
+            status_code=500
+        )
+
 
