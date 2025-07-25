@@ -1,5 +1,9 @@
 # api/index.py
 
+# 強制重新部署的註解 - 2025-07-25 09:48
+# (Adding a comment to force a re-deploy)
+from fastapi import FastAPI, Response
+
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel, Field
 from starlette.responses import Response
