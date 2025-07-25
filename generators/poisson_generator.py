@@ -1,4 +1,4 @@
-# generators/poisson_generator.py
+# /generators/poisson_generator.py (修正版)
 
 import io
 import numpy as np
@@ -6,53 +6,40 @@ from scipy.spatial import Voronoi
 import gdstk
 import ezdxf
 
+# 從我們的模型檔案中導入請求模型
+from api.models import PoissonRequest
+
 class PoissonVoronoiGenerator:
     """
     使用泊松盤採樣 (Poisson Disc Sampling) 生成的點來建立 Voronoi 圖樣。
-    所有幾何運算都在 gdstk 中完成，最後匯出為 DXF。
     """
-    def __init__(
-        self,
-        boundary_width_mm: float, boundary_height_mm: float,
-        radius_mm: float, k_samples: int,
-        cell_gap_mm: float,
-        add_text_label: bool, text_content: str, text_height_mm: float,
-        font_name: str, output_unit: str, **kwargs
-    ):
-        self.width = boundary_width_mm
-        self.height = boundary_height_mm
-        self.radius = radius_mm
-        self.k = k_samples
-        self.cell_gap_mm = cell_gap_mm
-        self.add_text_label = add_text_label
-        self.text_content = text_content
-        self.text_height_mm = text_height_mm
-        self.font_name = font_name
-        self.output_unit = output_unit
+    def __init__(self, **kwargs):
+        self.width = kwargs.get('boundary_width_mm')
+        self.height = kwargs.get('boundary_height_mm')
+        self.radius = kwargs.get('radius_mm')
+        self.k = kwargs.get('k_samples')
+        self.cell_gap_mm = kwargs.get('cell_gap_mm')
+        self.add_text_label = kwargs.get('add_text_label', False)
+        self.text_content = kwargs.get('text_content', "")
+        self.text_height_mm = kwargs.get('text_height_mm', 5.0)
+        self.font_name = kwargs.get('font_name', "Arial.ttf")
+        self.output_unit = kwargs.get('output_unit', 'mm')
         
-        # gdstk 預設單位是微米(um)。如果我們以 mm 工作，需要轉換。
         self.unit = 1000 if self.output_unit == 'um' else 1
 
     def _generate_poisson_disc_points(self) -> np.ndarray:
-        """
-        使用 Bridson 演算法實現泊松盤採樣，生成在邊界內均勻分佈的點。
-        """
         cellsize = self.radius / np.sqrt(2)
         grid_width = int(np.ceil(self.width / cellsize))
         grid_height = int(np.ceil(self.height / cellsize))
         grid = np.full((grid_width, grid_height), None, dtype=object)
         
-        process_list = []
-        points = []
-
-        # 產生第一個點
+        process_list, points = [], []
         first_point = np.random.uniform(0, [self.width, self.height])
         process_list.append(first_point)
         points.append(first_point)
         grid_x, grid_y = int(first_point[0] / cellsize), int(first_point[1] / cellsize)
         grid[grid_x, grid_y] = first_point
 
-        # 迭代生成新點
         while process_list:
             p = process_list.pop(np.random.randint(len(process_list)))
             for _ in range(self.k):
@@ -62,17 +49,13 @@ class PoissonVoronoiGenerator:
 
                 if 0 <= new_point[0] < self.width and 0 <= new_point[1] < self.height:
                     gx, gy = int(new_point[0] / cellsize), int(new_point[1] / cellsize)
-                    
                     is_valid = True
-                    # 檢查鄰近網格是否有衝突點
                     for i in range(max(0, gx - 2), min(grid_width, gx + 3)):
                         for j in range(max(0, gy - 2), min(grid_height, gy + 3)):
-                            if grid[i, j] is not None:
-                                if np.linalg.norm(grid[i, j] - new_point) < self.radius:
-                                    is_valid = False
-                                    break
-                        if not is_valid:
-                            break
+                            if grid[i, j] is not None and np.linalg.norm(grid[i, j] - new_point) < self.radius:
+                                is_valid = False
+                                break
+                        if not is_valid: break
                     
                     if is_valid:
                         process_list.append(new_point)
@@ -81,92 +64,56 @@ class PoissonVoronoiGenerator:
         return np.array(points)
 
     def run_generation_process(self) -> str:
-        """
-        執行完整的生成流程，並回傳 DXF 格式的字串。
-        """
-        # 1. 產生泊松盤採樣點
         points = self._generate_poisson_disc_points()
         if len(points) == 0:
-            # 如果沒有生成任何點，返回一個空的 DXF
             doc = ezdxf.new()
             stream = io.StringIO()
             doc.write(stream)
             return stream.getvalue()
             
-        # 計算平均間距，用於縮放
         avg_dist = np.sqrt((self.width * self.height) / len(points))
-
-        # 2. 建立 Voronoi 圖並轉換為 gdstk 多邊形
         vor = Voronoi(points)
-        voronoi_polygons_gds = []
-        for region in vor.regions:
-            if not region or -1 in region:
-                continue
-            polygon_points = np.array([vor.vertices[i] for i in region]) * self.unit
-            voronoi_polygons_gds.append(gdstk.Polygon(polygon_points))
+        voronoi_polygons_gds = [gdstk.Polygon(np.array([vor.vertices[i] for i in r]) * self.unit) for r in vor.regions if r and -1 not in r]
 
-        # 3. 建立邊界並裁剪 Voronoi 多邊形
-        boundary_gds = gdstk.rectangle(
-            (0, 0),
-            (self.width * self.unit, self.height * self.unit)
-        )
+        boundary_gds = gdstk.rectangle((0, 0), (self.width * self.unit, self.height * self.unit))
         clipped_polygons = gdstk.boolean(voronoi_polygons_gds, boundary_gds, 'and')
 
-        # 4. 縮放多邊形以產生間隙
-        final_voronoi_polygons = []
         if self.cell_gap_mm > 0 and clipped_polygons:
-            scaling_factor = 1.0 - (self.cell_gap_mm / avg_dist)
-            scaling_factor = max(0.1, scaling_factor)
-            
-            for poly in clipped_polygons:
-                final_voronoi_polygons.append(poly.scale(scaling_factor))
+            scaling_factor = max(0.1, 1.0 - (self.cell_gap_mm / avg_dist))
+            final_voronoi_polygons = [poly.scale(scaling_factor) for poly in clipped_polygons]
         else:
             final_voronoi_polygons = clipped_polygons
 
-        # 5. 產生文字多邊形 (如果需要)
         text_polygons = []
         if self.add_text_label and self.text_content:
             try:
-                text_obj = gdstk.text(
-                    self.text_content, 
-                    self.text_height_mm * self.unit, 
-                    (self.width / 2 * self.unit, self.height / 2 * self.unit)
-                )
-                temp_cell = gdstk.Cell("TEMP_TEXT").add(*text_obj)
-                text_polygons = temp_cell.get_polygons()
+                text_obj = gdstk.text(self.text_content, self.text_height_mm * self.unit, (self.width / 2 * self.unit, self.height / 2 * self.unit))
+                text_polygons = gdstk.Cell("TEMP_TEXT").add(*text_obj).get_polygons()
             except Exception as e:
                 print(f"Warning: Could not generate text polygons with gdstk. Error: {e}")
 
-        # 6. 從 Voronoi 圖案中減去 (挖空) 文字
-        if text_polygons:
-            final_polygons = gdstk.boolean(final_voronoi_polygons, text_polygons, 'not')
-        else:
-            final_polygons = final_voronoi_polygons
+        final_polygons = gdstk.boolean(final_voronoi_polygons, text_polygons, 'not') if text_polygons else final_voronoi_polygons
 
-        # 7. 將最終的幾何圖形寫入 DXF 文件
         doc = ezdxf.new()
         msp = doc.modelspace()
-
         b_pts = [(0,0), (self.width, 0), (self.width, self.height), (0, self.height)]
         msp.add_lwpolyline(b_pts, close=True, dxfattribs={"layer": "Boundary"})
         
         for poly in final_polygons:
-            points_in_mm = poly.points / self.unit
-            msp.add_lwpolyline(points_in_mm, close=True, dxfattribs={"layer": "Pattern"})
+            msp.add_lwpolyline(poly.points / self.unit, close=True, dxfattribs={"layer": "Pattern"})
             
-        # 【最終修復】將 DXF 內容寫入記憶體中的文字串流
         stream = io.StringIO()
         doc.write(stream)
-    
-        # 從串流的開頭讀取所有內容並回傳
-        return stream.getvalue()    
+        return stream.getvalue()
 
-# --- API 入口函式 ---
-def generate(**kwargs) -> str:
+# --- API 入口函式 (已修正) ---
+def generate_poisson_dxf(params: PoissonRequest) -> str:
     """
-    API 的入口點，接收參數字典並呼叫生成器。
+    API 的入口點，接收 Pydantic 模型並呼叫生成器。
+    回傳 DXF 檔案內容的字串。
     """
-    generator = PoissonVoronoiGenerator(**kwargs)
+    # 將 Pydantic 模型轉換為字典，傳遞給生成器類別
+    generator = PoissonVoronoiGenerator(**params.model_dump())
     dxf_content = generator.run_generation_process()
     return dxf_content
 
