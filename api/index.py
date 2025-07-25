@@ -21,6 +21,11 @@ app = FastAPI(
     version="1.1.0",
 )
 
+# --- 請在這裡加入這段測試程式碼 ---
+@app.get("/")
+def read_root():
+    return {"Status": "OK", "Message": "Welcome to the AG Generator API!"}
+# ------------------------------------
 # --- 為每個生成器定義專屬的參數模型 ---
 # 這樣可以利用 Pydantic 的所有驗證功能
 
