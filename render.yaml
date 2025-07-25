@@ -1,19 +1,21 @@
+# render.yaml
+# 正確的 Render Blueprint 配置
+
 services:
   - type: web
-    name: honeycomb-api # 您的服務名稱
+    name: honeycomb-api
     env: python
+    plan: starter # 或者您正在使用的方案
+    
+    # 告訴 Render 如何安裝依賴項
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "uvicorn api.index:app --host 0.0.0.0 --port $PORT"
     
-    # --- 加入或修改這一段 ---
-    preBuildCommand: "pip install --upgrade pip && pip uninstall -y ezdxf && pip install --no-cache-dir -r requirements.txt"
+    # 這是最關鍵的一行：告訴 Render 如何啟動您的應用
+    # uvicorn api.index:app 的意思是：
+    # "使用 uvicorn，去執行 api/index.py 這個模組 (api.index)，並找到名為 app 的 FastAPI 實例"
+    startCommand: "uvicorn api.index:app --host 0.0.0.0 --port 10000"
     
-    # --- 如果您有 buildFilter，請保留它 ---
-    buildFilter:
-      paths:
-      - "api/**"
-      - "generators/**"
-      - "requirements.txt"
-      - "render.yaml" # 建議也把這個檔案加進去
-      ignoredPaths:
-      - "*.md"
+    # 確保 Render 知道您的環境變數（如果有的話）
+    # envVars:
+    #   - key: PYTHON_VERSION
+    #     value: 3.9 # 請根據您的需要調整
