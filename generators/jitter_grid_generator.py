@@ -1,10 +1,13 @@
-# generators/jitter_grid_generator.py
+# /generators/jitter_grid_generator.py (最終修復版)
 
 import io
 import numpy as np
 from scipy.spatial import Voronoi
 import gdstk
 import ezdxf
+
+# 新增這一行：從我們的新模型檔案中導入請求模型
+from api.models import JitterGridRequest
 
 # 注意：我們將不再需要 ezdxf 的 text2path, BoundingBox 等，因為所有幾何運算都在 gdstk 中完成。
 
@@ -55,26 +58,23 @@ class VoronoiPatternGenerator:
     def _relax_points(self, points: np.ndarray) -> np.ndarray:
         """使用 Lloyd's 演算法對點進行鬆弛，使其分佈更均勻。"""
         for _ in range(self.relaxation_steps):
-            # 添加邊界外的"鬼"點來改善邊緣單元格的形狀
             box = [0, 0, self.boundary_width_mm, self.boundary_height_mm]
             vor = Voronoi(points, qhull_options="Qbb Qc Qz") # 選項有助於穩定性
             
             new_points = []
             for idx, region_idx in enumerate(vor.point_region):
                 if region_idx == -1:
-                    new_points.append(points[idx]) # 保留無效區域的點
+                    new_points.append(points[idx])
                     continue
                 
                 region = vor.regions[region_idx]
                 if not region or -1 in region:
-                    new_points.append(points[idx]) # 保留開放區域的點
+                    new_points.append(points[idx])
                     continue
 
-                # 計算區域的質心
                 polygon = np.array([vor.vertices[i] for i in region])
                 centroid = np.mean(polygon, axis=0)
                 
-                # 確保質心在邊界內
                 centroid[0] = np.clip(centroid[0], box[0], box[2])
                 centroid[1] = np.clip(centroid[1], box[1], box[3])
                 new_points.append(centroid)
@@ -85,16 +85,13 @@ class VoronoiPatternGenerator:
     def run_generation_process(self) -> str:
         """
         執行完整的生成流程，並回傳 DXF 格式的字串。
-        流程: 產生點 -> 鬆弛點 -> 產生 Voronoi 多邊形 -> 縮放/裁剪 -> 減去文字 -> 匯出 DXF
         """
-        # 1. 產生和鬆弛點
         initial_points = self._generate_initial_points()
         if self.relaxation_steps > 0:
             final_points = self._relax_points(initial_points)
         else:
             final_points = initial_points
             
-        # 2. 建立 Voronoi 圖並轉換為 gdstk 多邊形
         vor = Voronoi(final_points)
         voronoi_polygons_gds = []
         for region in vor.regions:
@@ -103,90 +100,67 @@ class VoronoiPatternGenerator:
             polygon_points = np.array([vor.vertices[i] for i in region]) * self.unit
             voronoi_polygons_gds.append(gdstk.Polygon(polygon_points))
 
-        # 3. 建立邊界並裁剪 Voronoi 多邊形
         boundary_gds = gdstk.rectangle(
             (0, 0),
             (self.boundary_width_mm * self.unit, self.boundary_height_mm * self.unit)
         )
         clipped_polygons = gdstk.boolean(voronoi_polygons_gds, boundary_gds, 'and')
 
-        # 4. 縮放多邊形以產生間隙
         final_voronoi_polygons = []
         if self.cell_gap_mm > 0 and clipped_polygons:
-            # 計算縮放因子
             scaling_factor = 1.0 - (self.cell_gap_mm / self.cell_avg_width)
-            scaling_factor = max(0.1, scaling_factor) # 避免縮放到零或負數
+            scaling_factor = max(0.1, scaling_factor)
             
             for poly in clipped_polygons:
-                # gdstk 的 scale 方法以質心為中心進行縮放
                 final_voronoi_polygons.append(poly.scale(scaling_factor))
         else:
             final_voronoi_polygons = clipped_polygons
 
-        # 5. 產生文字多邊形 (如果需要)
         text_polygons = []
         if self.add_text_label and self.text_content:
             try:
-                # gdstk.text 需要字體檔案路徑，這裡假設它在一個 'fonts' 資料夾中
-                # 在生產環境中，您需要確保這個路徑是正確的
-                # from pathlib import Path
-                # font_path = Path("fonts") / self.font_name
-                
                 text_obj = gdstk.text(
                     self.text_content, 
                     self.text_height_mm * self.unit, 
-                    (self.boundary_width_mm / 2 * self.unit, self.boundary_height_mm / 2 * self.unit),
-                    # font=str(font_path) # 如果字體不在系統路徑中
+                    (self.boundary_width_mm / 2 * self.unit, self.boundary_height_mm / 2 * self.unit)
                 )
-                # 將文字轉換為多邊形
                 temp_cell = gdstk.Cell("TEMP_TEXT").add(*text_obj)
                 text_polygons = temp_cell.get_polygons()
             except Exception as e:
                 print(f"Warning: Could not generate text polygons with gdstk. Error: {e}")
 
-        # 6. 從 Voronoi 圖案中減去 (挖空) 文字
         if text_polygons:
             final_polygons = gdstk.boolean(final_voronoi_polygons, text_polygons, 'not')
         else:
             final_polygons = final_voronoi_polygons
 
-        # 7. 將最終的幾何圖形寫入 DXF 文件
         doc = ezdxf.new()
         msp = doc.modelspace()
 
-        # 添加邊界框
         b_pts = [
             (0, 0), (self.boundary_width_mm, 0),
             (self.boundary_width_mm, self.boundary_height_mm), (0, self.boundary_height_mm)
         ]
         msp.add_lwpolyline(b_pts, close=True, dxfattribs={"layer": "Boundary"})
         
-        # 添加最終的圖案多邊形
         for poly in final_polygons:
-            # 從 gdstk 單位轉換回 DXF 單位 (mm)
             points_in_mm = poly.points / self.unit
             msp.add_lwpolyline(points_in_mm, close=True, dxfattribs={"layer": "Pattern"})
         
-        # ... (省略前面添加多邊形的程式碼)
-
-        # 【最終修復】將 DXF 內容寫入記憶體中的文字串流。
-        # 我們不再需要任何 DEBUG 或 DIAGNOSTICS 輸出，將它們全部移除。
         stream = io.StringIO()
         doc.write(stream)
     
-        # 從串流的開頭讀取所有內容並回傳
         return stream.getvalue()
 
 
-# --- API 入口函式 ---
-def generate(**kwargs) -> str:
+# --- API 入口函式 (修改後) ---
+def generate_jitter_grid_dxf(params: JitterGridRequest) -> str:
     """
-    API 的入口點，接收參數字典並呼叫生成器。
+    API 的入口點，接收 Pydantic 模型並呼叫生成器。
     回傳 DXF 檔案內容的字串。
     """
-    # Pydantic 模型已經在 API 層處理了預設值和驗證，這裡直接實例化即可
-    generator = VoronoiPatternGenerator(**kwargs)
+    # 將 Pydantic 模型轉換為字典，傳遞給生成器類別
+    generator = VoronoiPatternGenerator(**params.model_dump())
     dxf_content = generator.run_generation_process()
     return dxf_content
-
 
