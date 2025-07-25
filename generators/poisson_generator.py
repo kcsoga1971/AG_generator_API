@@ -1,5 +1,6 @@
 # generators/poisson_generator.py
 
+import io
 import numpy as np
 from scipy.spatial import Voronoi
 import gdstk
@@ -87,7 +88,10 @@ class PoissonVoronoiGenerator:
         points = self._generate_poisson_disc_points()
         if len(points) == 0:
             # 如果沒有生成任何點，返回一個空的 DXF
-            return ezdxf.new().tostring()
+            doc = ezdxf.new()
+            stream = io.StringIO()
+            doc.write(stream)
+            return stream.getvalue()
             
         # 計算平均間距，用於縮放
         avg_dist = np.sqrt((self.width * self.height) / len(points))
@@ -150,7 +154,12 @@ class PoissonVoronoiGenerator:
             points_in_mm = poly.points / self.unit
             msp.add_lwpolyline(points_in_mm, close=True, dxfattribs={"layer": "Pattern"})
             
-        return doc.tostring()
+        # 【最終修復】將 DXF 內容寫入記憶體中的文字串流
+        stream = io.StringIO()
+        doc.write(stream)
+    
+        # 從串流的開頭讀取所有內容並回傳
+        return stream.getvalue()    
 
 # --- API 入口函式 ---
 def generate(**kwargs) -> str:

@@ -1,5 +1,6 @@
 # generators/sunflower_generator.py
 
+import io
 import numpy as np
 from scipy.spatial import Voronoi
 import gdstk
@@ -163,7 +164,12 @@ class SunflowerVoronoiGenerator:
             points_in_mm = poly.points / self.unit
             msp.add_lwpolyline(points_in_mm, close=True, dxfattribs={"layer": "Pattern"})
             
-        return doc.tostring()
+        # 【最終修復】將 DXF 內容寫入記憶體中的文字串流
+        stream = io.StringIO()
+        doc.write(stream)
+    
+        # 從串流的開頭讀取所有內容並回傳
+        return stream.getvalue()
 
 # --- API 入口函式 ---
 def generate(**kwargs) -> str:

@@ -1,5 +1,6 @@
 # generators/jitter_grid_generator.py
 
+import io
 import numpy as np
 from scipy.spatial import Voronoi
 import gdstk
@@ -166,19 +167,15 @@ class VoronoiPatternGenerator:
             points_in_mm = poly.points / self.unit
             msp.add_lwpolyline(points_in_mm, close=True, dxfattribs={"layer": "Pattern"})
         
-        print(">>> DEBUG: JITTER_GRID_GENERATOR v2 IS RUNNING. ABOUT TO RETURN STRING.")    
-            # --- 加入這些終極除錯程式碼 ---
-        # import ezdxf  <--- 移除這一行！
-        print(f"--- DIAGNOSTICS ---")
-        print(f"ezdxf version being used: {ezdxf.__version__}")
-        print(f"ezdxf library location: {ezdxf.__file__}")
-        print(f"Type of 'doc' object: {type(doc)}")
-        # dir(doc) 會列出物件所有可用的屬性和方法
-        print(f"Attributes of 'doc' object: {dir(doc)}")
-        print(f"--- END DIAGNOSTICS ---")
+        # ... (省略前面添加多邊形的程式碼)
 
-        # 這一行仍然會報錯，但上面的日誌會告訴我們為什麼        
-        return doc.tostring()
+            # 【最終修復】將 DXF 內容寫入記憶體中的文字串流。
+            # 我們不再需要任何 DEBUG 或 DIAGNOSTICS 輸出，將它們全部移除。
+            stream = io.StringIO()
+            doc.write(stream)
+    
+            # 從串流的開頭讀取所有內容並回傳
+            return stream.getvalue()
 
 
 # --- API 入口函式 ---
