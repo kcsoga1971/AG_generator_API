@@ -169,13 +169,13 @@ class VoronoiPatternGenerator:
         
         # ... (省略前面添加多邊形的程式碼)
 
-            # 【最終修復】將 DXF 內容寫入記憶體中的文字串流。
-            # 我們不再需要任何 DEBUG 或 DIAGNOSTICS 輸出，將它們全部移除。
-            stream = io.StringIO()
-            doc.write(stream)
+        # 【最終修復】將 DXF 內容寫入記憶體中的文字串流。
+        # 我們不再需要任何 DEBUG 或 DIAGNOSTICS 輸出，將它們全部移除。
+        stream = io.StringIO()
+        doc.write(stream)
     
-            # 從串流的開頭讀取所有內容並回傳
-            return stream.getvalue()
+        # 從串流的開頭讀取所有內容並回傳
+        return stream.getvalue()
 
 
 # --- API 入口函式 ---
