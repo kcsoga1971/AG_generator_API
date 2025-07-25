@@ -1,20 +1,32 @@
-# /api/models.py (新檔案)
+# /api/models.py (最終正確版)
 
-from pydantic import BaseModel
-from typing import Literal
+from pydantic import BaseModel, Field
 
-# 將資料模型（請求的結構）放在一個獨立的檔案中
-# 這樣可以被 API 端點和生成器函式安全地導入，而不會產生循環
-class JitterGridRequest(BaseModel):
-    boundary_width_mm: float
-    boundary_height_mm: float
-    grid_rows: int
-    grid_cols: int
-    jitter_strength: float
-    relaxation_steps: int
-    cell_gap_mm: float
-    add_text_label: bool = False
-    text_content: str = "Test"
-    text_height_mm: float = 5.0
-    font_name: str = "Arial.ttf"
-    output_unit: Literal['mm', 'um'] = 'mm'
+# --- 基礎請求模型 ---
+class BasePatternRequest(BaseModel):
+    boundary_width_mm: float = Field(..., example=100.0, description="圖樣的總寬度 (mm)")
+    boundary_height_mm: float = Field(..., example=100.0, description="圖樣的總高度 (mm)")
+    cell_gap_mm: float = Field(0.1, example=0.1, description="每個 Voronoi 單元之間的間隙寬度 (mm)")
+    add_text_label: bool = Field(False, example=True, description="是否在圖樣中央加入文字標籤")
+    text_content: str = Field("TEXT", example="Honeycomb", description="要加入的文字內容")
+    text_height_mm: float = Field(10.0, example=10.0, description="文字的高度 (mm)")
+    font_name: str = Field("Arial.ttf", description="（目前未啟用）用於文字的字體檔案名稱")
+    output_unit: str = Field("mm", example="mm", description="輸出 DXF 檔案的單位 ('mm' 或 'um')")
+
+# --- 特定生成器的模型 ---
+
+class JitterGridRequest(BasePatternRequest):
+    grid_rows: int = Field(..., example=20, description="網格的行數")
+    grid_cols: int = Field(..., example=20, description="網格的列數")
+    jitter_strength: float = Field(..., example=0.5, description="抖動強度 (0 到 1 之間，0=無抖動, 1=最大抖動)")
+    relaxation_steps: int = Field(..., example=2, description="Lloyd's 鬆弛演算法的迭代次數")
+
+class SunflowerRequest(BasePatternRequest):
+    num_points: int = Field(..., example=400, description="要生成的點的目標數量")
+    sunflower_c: float = Field(..., example=3.6, description="向日葵螺旋的常數 c (影響點的密度)")
+    jitter_strength: float = Field(..., example=0.1, description="點生成後的抖動強度 (0 到 1)")
+    relaxation_steps: int = Field(..., example=1, description="Lloyd's 鬆弛演算法的迭代次數")
+
+class PoissonRequest(BasePatternRequest):
+    radius_mm: float = Field(..., example=5.0, description="泊松盤採樣中點之間的最小距離 (mm)")
+    k_samples: int = Field(30, example=30, description="每個點周圍嘗試生成新點的次數 (影響採樣密度)")
