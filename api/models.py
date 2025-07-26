@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 
 # --- 基礎請求模型 ---
 class BasePatternRequest(BaseModel):
+    job_id: str = Field(..., example="e25dc1a1-bb59-4d5b-b24c-f580ce916b80", description="由 n8n 工作流傳入的唯一任務 ID，將作為檔名使用")
+
     boundary_width_mm: float = Field(..., example=100.0, description="圖樣的總寬度 (mm)")
     boundary_height_mm: float = Field(..., example=100.0, description="圖樣的總高度 (mm)")
     cell_gap_mm: float = Field(0.1, example=0.1, description="每個 Voronoi 單元之間的間隙寬度 (mm)")
