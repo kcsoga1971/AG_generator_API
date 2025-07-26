@@ -1,5 +1,10 @@
 # /api/index.py (已修改為上傳 Supabase 版本)
 
+# 在 index.py 頂部新增/確認這些 import
+import itertools
+from typing import List
+from .models import JitterGridRequest, SunflowerRequest, PoissonRequest, JitterGridResponse # <--- 匯入 JitterGridResponse
+
 import os
 from fastapi import FastAPI, Body, HTTPException
 from fastapi.responses import JSONResponse
@@ -37,43 +42,61 @@ BUCKET_NAME = "generatedfiles" # 您在 Supabase 中的 Bucket 名稱
 def read_root():
     return {"message": "Welcome to the Honeycomb API. See /docs for endpoints."}
 
-@app.post("/generate/jitter-grid", tags=["Generators"], response_model=dict)
+# --- 請用下面的程式碼替換掉你原本的 generate_jitter_grid_endpoint 函式 ---
+
+@app.post("/generate/jitter-grid", tags=["Generators"], response_model=JitterGridResponse) # <--- 1. 更新 response_model
 async def generate_jitter_grid_endpoint(params: JitterGridRequest = Body(...)):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase client 未成功初始化")
 
-    # 步驟 1: 生成 DXF 檔案內容 (這部分不變)
-    dxf_content = generate_jitter_grid_dxf(params)
+    # 2. 初始化一個列表，用來收集所有生成檔案的 URL
+    generated_urls = []
     
-    # 步驟 2: 使用 job_id 作為檔案路徑/名稱
-    file_path = f"{params.job_id}.dxf"
-    
+    # 3. 使用 itertools.product 產生所有參數組合
+    param_combinations = itertools.product(params.grid_cols_options, params.cell_gap_mm_options)
+
     try:
-        # 步驟 3: 將檔案內容上傳到 Supabase Storage
-        # 我們需要將字串編碼為 bytes
-        supabase.storage.from_(BUCKET_NAME).upload(
-            path=file_path,
-            file=dxf_content.encode('utf-8'),
-            file_options={"content-type": "image/vnd.dxf", "upsert": "true"}
+        # 4. 遍歷每一個參數組合
+        for grid_col_option, cell_gap_option in param_combinations:
+            
+            # 5. 為每個組合建立一個獨一無二的檔案路徑 (在 job_id 資料夾下)
+            #    這讓檔名具有描述性，例如: "e25dc1a1.../20cols_0.1gap.dxf"
+            file_path = f"{params.job_id}/{grid_col_option}cols_{cell_gap_option}gap.dxf"
+
+            # 6. 建立一個用於此次迭代的參數物件副本
+            #    這是最關鍵的一步：我們複製原始請求，只更新當前迴圈需要變更的欄位
+            iteration_params_dict = params.model_dump()
+            iteration_params_dict['grid_cols'] = grid_col_option
+            iteration_params_dict['cell_gap_mm'] = cell_gap_option
+            
+            # 將字典轉回 Pydantic 模型，以符合 generate_jitter_grid_dxf 的預期輸入
+            iteration_params = JitterGridRequest(**iteration_params_dict)
+
+            # 7. 呼叫生成器函式，傳入為本次迴圈特製的參數物件
+            dxf_content = generate_jitter_grid_dxf(iteration_params)
+            
+            # 8. 將生成的 DXF 內容上傳到 Supabase Storage
+            supabase.storage.from_(BUCKET_NAME).upload(
+                path=file_path,
+                file=dxf_content.encode('utf-8'),
+                file_options={"content-type": "image/vnd.dxf", "upsert": "true"}
+            )
+            
+            # 9. 取得該檔案的公開 URL
+            public_url_data = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
+            
+            # 10. 將 URL 加入到我們的列表中
+            generated_urls.append(public_url_data)
+
+        # 11. 迴圈結束後，回傳包含所有 URL 的成功回應
+        return JitterGridResponse(
+            job_id=params.job_id, 
+            publicUrls=generated_urls
         )
         
-        # 步驟 4: 取得該檔案的公開 URL
-        public_url_data = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
-        
-        # 步驟 5: 回傳包含 URL 的 JSON 給 n8n
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "success",
-                "job_id": params.job_id,
-                "publicUrl": public_url_data
-            }
-        )
     except Exception as e:
-        # 如果上傳過程出錯，回傳詳細的錯誤訊息
-        raise HTTPException(status_code=500, detail=f"上傳檔案至 Supabase 時發生錯誤: {str(e)}")
-
-
+        # 如果過程中發生任何錯誤，回報錯誤
+        raise HTTPException(status_code=500, detail=f"生成或上傳檔案時發生錯誤: {str(e)}")
 # --- 為其他兩個端點套用相同的模式 ---
 
 @app.post("/generate/sunflower", tags=["Generators"], response_model=dict)
