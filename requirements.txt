@@ -6,3 +6,4 @@ numpy
 scipy
 gdstk
 ezdxf==1.4.2
+supabase

@@ -19,3 +19,16 @@ services:
     # envVars:
     #   - key: PYTHON_VERSION
     #     value: 3.9 # 請根據您的需要調整
+
+    # --- 新增此區塊 ---
+    envVars:
+      - key: SUPABASE_URL
+        fromService:
+          type: external # 或直接 sync from your environment group
+          name: supabase-credentials # 這是您在 Render 建立的環境群組名稱
+          key: SUPABASE_URL
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        fromService:
+          type: external
+          name: supabase-credentials
+          key: SUPABASE_SERVICE_ROLE_KEY
