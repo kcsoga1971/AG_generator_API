@@ -1,49 +1,43 @@
-# /api/models.py (改造後)
+# /api/models.py (v4 - 獨立的 Cell Size 和 Line Width)
 
 from pydantic import BaseModel, Field
-from typing import List # <--- 1. 匯入 List
+from typing import List, Optional
 
-# --- 基礎請求模型 ---
-class BasePatternRequest(BaseModel):
-    job_id: str = Field(..., example="e25dc1a1-bb59-4d5b-b24c-f580ce916b80", description="由 n8n 工作流傳入的唯一任務 ID")
-    boundary_width_mm: float = Field(..., example=100.0, description="圖樣的總寬度 (mm)")
-    boundary_height_mm: float = Field(..., example=100.0, description="圖樣的總高度 (mm)")
-    add_text_label: bool = Field(False, example=True, description="是否在圖樣中央加入文字標籤")
-    text_content: str = Field("TEXT", example="Honeycomb", description="要加入的文字內容")
-    text_height_mm: float = Field(10.0, example=10.0, description="文字的高度 (mm)")
-    font_name: str = Field("Arial.ttf", description="（目前未啟用）用於文字的字體檔案名稱")
-    output_unit: str = Field("mm", example="mm", description="輸出 DXF 檔案的單位 ('mm' 或 'um')")
+# --- 1. 通用基礎模型 ---
+class BaseGeneratorRequest(BaseModel):
+    job_id: str
+    boundary_width_mm: float = Field(..., gt=0, description="邊界寬度 (mm)")
+    boundary_height_mm: float = Field(..., gt=0, description="邊界高度 (mm)")
+    add_text_label: bool = Field(False, description="是否在圖樣中加入文字標籤")
+    cell_size_um_options: List[float] = Field(..., gt=0, description="要測試的目標單元尺寸 (um) 選項列表")
 
-# --- 特定生成器的模型 ---
+# --- 2. 各生成器的請求模型 ---
 
-class JitterGridRequest(BasePatternRequest):
-    # 2. 修改參數為陣列形式
-    grid_rows: int = Field(..., example=20, description="網格的行數")
-    jitter_strength: float = Field(..., example=0.5, description="抖動強度 (0 到 1)")
-    relaxation_steps: int = Field(..., example=2, description="Lloyd's 鬆弛演算法的迭代次數")
+class JitterGridRequest(BaseGeneratorRequest):
+    # 【核心修改】新增獨立的線寬/間隙批次參數
+    line_width_um_options: List[float] = Field(..., gt=0, description="要測試的線寬 (um) 選項列表")
     
-    # 將 grid_cols 和 cell_gap_mm 改為選項列表
-    grid_cols_options: List[int] = Field(..., example=[20, 30], description="要遍歷的網格列數選項列表")
-    cell_gap_mm_options: List[float] = Field(..., example=[0.1, 0.2], description="要遍歷的單元間隙選項列表 (mm)")
+    # 【移除】移除不直觀的比例參數
+    # gap_to_cell_ratio: float 
 
-# --- 其他請求模型保持不變 ---
-class SunflowerRequest(BasePatternRequest):
-    num_points: int = Field(..., example=400, description="要生成的點的目標數量")
-    sunflower_c: float = Field(..., example=3.6, description="向日葵螺旋的常數 c")
-    jitter_strength: float = Field(..., example=0.1, description="點生成後的抖動強度 (0 到 1)")
-    relaxation_steps: int = Field(..., example=1, description="Lloyd's 鬆弛演算法的迭代次數")
-    cell_gap_mm: float = Field(0.1, example=0.1, description="每個 Voronoi 單元之間的間隙寬度 (mm)")
+    # 單次生成參數 (由 API 內部在迴圈中填寫)
+    grid_cols: Optional[int] = Field(None, description="單次運行的網格欄數 (由 cell_size 計算)")
+    cell_gap_mm: Optional[float] = Field(None, description="單次運行的單元間隙 (mm) (由 line_width 轉換)")
+    
+    # 固定參數
+    jitter_strength: float = Field(0.5, ge=0, le=1, description="抖動強度 (0 到 1)")
+    relaxation_steps: int = Field(1, ge=0, description="鬆弛迭代次數")
 
+class SunflowerRequest(BaseGeneratorRequest):
+    num_points: Optional[int] = Field(None, description="單次運行的點數 (由 cell_size 計算)")
+    c_const: float = Field(4.0, description="Sunflower 演算法中的常數 c")
 
-class PoissonRequest(BasePatternRequest):
-    radius_mm: float = Field(..., example=5.0, description="泊松盤採樣中點之間的最小距離 (mm)")
-    k_samples: int = Field(30, example=30, description="每個點周圍嘗試生成新點的次數")
-    cell_gap_mm: float = Field(0.1, example=0.1, description="每個 Voronoi 單元之間的間隙寬度 (mm)")
+class PoissonRequest(BaseGeneratorRequest):
+    radius_mm: Optional[float] = Field(None, description="單次運行的 Poisson 盤半徑 (mm) (由 cell_size 計算)")
+    candidates: int = Field(30, description="每個新點的候選數量 (k)")
 
+# --- 3. API 回應模型 ---
 
-# 3. 新增 API 回應模型
-class JitterGridResponse(BaseModel):
-    status: str = "success"
+class BaseResponse(BaseModel):
     job_id: str
     publicUrls: List[str]
-
