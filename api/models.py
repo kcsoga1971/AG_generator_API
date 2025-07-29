@@ -1,6 +1,6 @@
 # /api/models.py (v4 - 獨立的 Cell Size 和 Line Width)
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, confloat
 from typing import List, Optional
 
 # --- 1. 通用基礎模型 ---
