@@ -61,18 +61,20 @@ async def generate_jitter_grid_endpoint(params: JitterGridRequest = Body(...)):
 
     for cell_size_um, line_width_um in param_combinations:
         try:
-            # 1. 計算 grid_cols
+            # 1. 計算 grid_cols 和 grid_rows
             cell_size_mm = um_to_mm(cell_size_um)
             grid_cols = max(1, round(params.boundary_width_mm / cell_size_mm))
+            grid_rows = max(1, round(params.boundary_height_mm / cell_size_mm)) # ✅【修正】新增這一行
             
             # 2. 計算 cell_gap_mm (直接從 line_width 轉換)
             cell_gap_mm = um_to_mm(line_width_um)
-            
+
             # 檔名現在包含兩個關鍵參數
             file_path = f"{params.job_id}/jitter_cell-{cell_size_um}um_gap-{line_width_um}um.dxf"
             
             iteration_params_dict = params.model_dump()
             iteration_params_dict['grid_cols'] = grid_cols
+            iteration_params_dict['grid_rows'] = grid_rows # ✅【修正】將 grid_rows 加入字典
             iteration_params_dict['cell_gap_mm'] = cell_gap_mm
             
             iteration_params = JitterGridRequest(**iteration_params_dict)
