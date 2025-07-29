@@ -23,6 +23,7 @@ class JitterGridRequest(BaseGeneratorRequest):
 
     # 單次生成參數 (由 API 內部在迴圈中填寫)
     grid_cols: Optional[int] = Field(None, description="單次運行的網格欄數 (由 cell_size 計算)")
+    grid_rows: Optional[int] = Field(None, description="單次運行的網格列數 (由 cell_size 計算)") # ✅【最終修正】補上這一行
     cell_gap_mm: Optional[float] = Field(None, description="單次運行的單元間隙 (mm) (由 line_width 轉換)")
     
     # 固定參數
