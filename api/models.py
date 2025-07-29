@@ -9,14 +9,15 @@ class BaseGeneratorRequest(BaseModel):
     boundary_width_mm: float = Field(..., gt=0, description="邊界寬度 (mm)")
     boundary_height_mm: float = Field(..., gt=0, description="邊界高度 (mm)")
     add_text_label: bool = Field(False, description="是否在圖樣中加入文字標籤")
-    cell_size_um_options: List[float] = Field(..., gt=0, description="要測試的目標單元尺寸 (um) 選項列表")
-
-# --- 2. 各生成器的請求模型 ---
+     # ✅【修正 #1】使用 confloat(gt=0) 來驗證列表中的每一個浮點數
+    cell_size_um_options: List[confloat(gt=0)] = Field(..., description="要測試的目標單元尺寸 (um) 選項列表")
+#
+#  --- 2. 各生成器的請求模型 ---
 
 class JitterGridRequest(BaseGeneratorRequest):
     # 【核心修改】新增獨立的線寬/間隙批次參數
-    line_width_um_options: List[float] = Field(..., gt=0, description="要測試的線寬 (um) 選項列表")
-    
+    line_width_um_options: List[confloat(gt=0)] = Field(..., description="要測試的線寬 (um) 選項列表")
+
     # 【移除】移除不直觀的比例參數
     # gap_to_cell_ratio: float 
 
